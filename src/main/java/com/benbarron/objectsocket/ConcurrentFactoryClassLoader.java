@@ -20,6 +20,8 @@ class ConcurrentFactoryClassLoader extends ClassLoader {
     protected Class<?> findClass(String name) throws ClassNotFoundException {
         byte[] definition;
 
+        System.out.println(name);
+
         try {
             definition = factory.apply(new ClassLoaderRequest(name)).get().getDefinition();
         } catch (Exception e) {

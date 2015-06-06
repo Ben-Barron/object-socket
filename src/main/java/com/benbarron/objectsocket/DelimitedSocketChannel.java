@@ -1,5 +1,8 @@
 package com.benbarron.objectsocket;
 
+import com.benbarron.flow.Flow;
+import com.benbarron.flow.SimpleFlow;
+
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
@@ -9,12 +12,19 @@ class DelimitedSocketChannel implements AutoCloseable {
 
     private static final int DEFAULT_BUFFER_SIZE = 8192;
 
-    private final ByteBuffer readBuffer = ByteBuffer.allocateDirect(DEFAULT_BUFFER_SIZE);
     private final AsynchronousSocketChannel channel;
-    private final SimpleStream<byte[]> messagesStream = new SimpleStream<>();
+    private final SimpleFlow<byte[]> messages = new SimpleFlow<>();
+    private final ByteBuffer readBuffer;
 
     public DelimitedSocketChannel(AsynchronousSocketChannel underlyingChannel) {
+        this(underlyingChannel, DEFAULT_BUFFER_SIZE);
+    }
+
+    public DelimitedSocketChannel(AsynchronousSocketChannel underlyingChannel,
+                                  int bufferSize) {
+
         this.channel = underlyingChannel;
+        this.readBuffer = ByteBuffer.allocateDirect(bufferSize);
     }
 
     @Override
@@ -22,52 +32,12 @@ class DelimitedSocketChannel implements AutoCloseable {
         channel.close();
     }
 
-    public Stream<byte[]> messages() {
-        return messagesStream;
+    public Flow<byte[]> messages() {
+        return messages;
     }
 
     public void start() {
-        channel.read(readBuffer, null, new CompletionHandler<Integer, Object>() {
-
-            private volatile ByteBuffer currentObjectBuffer = null;
-
-            @Override
-            public void completed(Integer result, Object attachment) {
-                do {
-                    if (currentObjectBuffer == null) {
-                        if (readBuffer.remaining() < Integer.BYTES) {
-                            readBuffer.compact();
-                            break;
-                        }
-
-                        currentObjectBuffer = ByteBuffer.allocate(readBuffer.getInt());
-                    }
-
-                    currentObjectBuffer.put(readBuffer);
-
-                    if (!currentObjectBuffer.hasRemaining()) {
-                        byte[] objectBytes = currentObjectBuffer.array();
-                        ForkJoinPool.commonPool().execute(() -> messagesStream.next(objectBytes));
-
-                        currentObjectBuffer = null;
-                    }
-
-                    if (readBuffer.hasRemaining()) {
-                        continue;
-                    }
-
-                    readBuffer.clear();
-                    break;
-                } while (true);
-
-                channel.read(readBuffer, null, this);
-            }
-
-            @Override
-            public void failed(Throwable exc, Object attachment) {
-                messagesStream.error(exc);
-            }
-        });
+        channel.read(readBuffer, null, new DelimitedReadCompletionHandler(channel, messages, readBuffer));
     }
 
     public void write(byte[] message) {
