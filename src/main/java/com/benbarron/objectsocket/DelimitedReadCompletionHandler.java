@@ -10,7 +10,7 @@ class DelimitedReadCompletionHandler implements CompletionHandler<Integer, Objec
 
     private final AsynchronousByteChannel channel;
     private final Producer<byte[]> producer;
-    private final ByteBuffer channelReadBuffer;
+    private final ByteBuffer channelReadBuffer; // this is a direct buffer.
 
     private volatile ByteBuffer currentMessageBuffer;
 
@@ -26,6 +26,11 @@ class DelimitedReadCompletionHandler implements CompletionHandler<Integer, Objec
     @Override
     public void completed(Integer result,
                           Object attachment) {
+
+        if (result < 0) {
+            producer.complete();
+            return;
+        }
 
         channelReadBuffer.flip();
 

@@ -16,10 +16,9 @@ interface Client {
             public void completed(Void result, Object attachment) {
                 ObjectSocketChannel channel = new ObjectSocketChannel(socketChannel);
                 channel.start();
-                channel.write(new S());
-                channel.write(new S());
-                channel.write(new S());
-                channel.write(new S());
+                for (int i = 0; i < 8000; i++) {
+                    channel.write(new S());
+                }
             }
 
             @Override
